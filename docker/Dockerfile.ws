@@ -1,18 +1,28 @@
-FROM oven/bun:1
+FROM oven/bun:1 as builder
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-COPY ./packages ./packages
-COPY ./bun.lock ./bun.lock
+COPY ./package.json /app/package.json
+COPY ./packages /app/packages
+COPY ./bun.lock /app/bun.lock
+COPY ./turbo.json /app/turbo.json
 
-COPY ./package.json ./package.json
-COPY ./turbo.json ./turbo.json
-
-COPY ./apps/websocket ./apps/websocket
+COPY ./apps/websocket /app/apps/websocket
 
 RUN bun install
 RUN bun run db:generate
 
-EXPOSE 8081
+# stage 2
 
-CMD ["bun", "run", "start:websocket"]
+FROM oven/bun:1-slim
+
+WORKDIR /app
+
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/bun.lock /app/bun.lock
+COPY --from=builder /app/turbo.json /app/turbo.json
+
+COPY --from=builder /app/apps/websocket /app/apps/websocket
+
+CMD ["bun","run","start:websocket"]
