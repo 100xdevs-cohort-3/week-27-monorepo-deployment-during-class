@@ -1,20 +1,39 @@
-FROM oven/bun:1
+FROM oven/bun:1 as builder
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
+# variable 
 ARG DATABASE_URL
-COPY ./packages ./packages
-COPY ./bun.lock ./bun.lock
+ENV DATABASE_URL=${DATABASE_URL}
 
-COPY ./package.json ./package.json
-COPY ./turbo.json ./turbo.json
+#copy the configration files
+COPY ./packages /app/packages
+COPY ./bun.lock /app/bun.lock
+COPY ./package.json /app/package.json
+COPY ./turbo.json /app/turbo.json
 
-COPY ./apps/web ./apps/web
+# copy the main app
+COPY ./apps/web /app/apps/web
 
 RUN bun install
-RUN bun run db:generate
-RUN DATABASE_URL=${DATABASE_URL} bun run build
+# add this "db:generate": "cd packages/db && bunx prisma generate && cd ../..",
+RUN bun run db:generate 
+RUN DATABASE_URL=${DATABASE_URL}  bun run build
 
-EXPOSE 3000
 
-CMD ["bun", "run", "start:web"]
+# stage 2
+FROM oven/bun:1-slim
+
+WORKDIR /app
+
+COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/bun.lock /app/bun.lock
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/turbo.json /app/turbo.json
+
+# main app build files
+COPY --from=builder /app/apps/web/.next /app/apps/web/.next
+COPY --from=builder /app/apps/web/public /app/apps/web/public
+
+# "start:web": "cd apps/web && bun run start && cd ../..",
+CMD ["npm" , "run" , "start:web"]
